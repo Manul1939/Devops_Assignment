@@ -1,0 +1,9 @@
+tenantName: user1
+image:
+  repository: manulvishwakarma/tenant-node-app
+  tag: main
+containerPort: 3000
+ingress:
+  host: user1.example.com
+  tls:
+    secretName: user1-example-com-tls

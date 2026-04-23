@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tenant-site.fullname" . }}
+  labels:
+    app: {{ include "tenant-site.fullname" . }}
+    tenant: {{ .Values.tenantName }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "tenant-site.fullname" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "tenant-site.fullname" . }}
+        tenant: {{ .Values.tenantName }}
+    spec:
+      containers:
+        - name: web
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.containerPort }}
+          env:
+            - name: TENANT_NAME
+              value: {{ .Values.tenantName | quote }}
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.livenessPath }}
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.readinessPath }}
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5

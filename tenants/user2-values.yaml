@@ -1,0 +1,12 @@
+tenantName: user2
+image:
+  repository: manulvishwakarma/tenant-flask-app
+  tag: main
+containerPort: 5000
+probes:
+  livenessPath: /healthz
+  readinessPath: /readyz
+ingress:
+  host: user2.example.com
+  tls:
+    secretName: user2-example-com-tls

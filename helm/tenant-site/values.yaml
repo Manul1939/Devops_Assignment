@@ -1,0 +1,66 @@
+nameOverride: ""
+fullnameOverride: ""
+
+tenantName: user1
+image:
+  repository: ghcr.io/your-org/tenant-node-app
+  tag: latest
+  pullPolicy: IfNotPresent
+
+containerPort: 3000
+
+service:
+  type: ClusterIP
+  port: 80
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+probes:
+  livenessPath: /healthz
+  readinessPath: /readyz
+
+ingress:
+  enabled: true
+  className: nginx
+  host: user1.example.com
+  tls:
+    enabled: true
+    secretName: user1-tls
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-staging
+
+hpa:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 5
+  cpuUtilization: 70
+  memoryUtilization: 75
+
+pdb:
+  enabled: true
+  minAvailable: 1
+
+networkPolicy:
+  enabled: true
+
+quota:
+  hard:
+    requests.cpu: "2"
+    requests.memory: 2Gi
+    limits.cpu: "4"
+    limits.memory: 4Gi
+    pods: "20"
+
+limitRange:
+  default:
+    cpu: 500m
+    memory: 512Mi
+  defaultRequest:
+    cpu: 100m
+    memory: 128Mi

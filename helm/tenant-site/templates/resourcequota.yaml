@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: {{ include "tenant-site.fullname" . }}-quota
+spec:
+  hard:
+{{ toYaml .Values.quota.hard | indent 4 }}
