@@ -75,9 +75,18 @@ jobs:
         uses: azure/setup-helm@v4
 
       - name: Configure kubeconfig
+        shell: bash
         run: |
           mkdir -p ~/.kube
-          echo "${KUBE_CONFIG_DATA}" | base64 -d > ~/.kube/config
+          # Accept either base64 kubeconfig or raw kubeconfig text.
+          CLEAN_INPUT="$(printf '%s' "${KUBE_CONFIG_DATA}" | tr -d '\r')"
+          if printf '%s' "${CLEAN_INPUT}" | base64 --decode > ~/.kube/config 2>/dev/null; then
+            echo "Loaded kubeconfig from base64 secret."
+          else
+            printf '%s\n' "${KUBE_CONFIG_DATA}" > ~/.kube/config
+            echo "Loaded kubeconfig from raw secret text."
+          fi
+          chmod 600 ~/.kube/config
         env:
           KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
 
