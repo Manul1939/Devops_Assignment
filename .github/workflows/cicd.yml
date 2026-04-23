@@ -7,7 +7,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAMESPACE: your-org
+  IMAGE_NAMESPACE: Manul1939
   KAFKA_TOPIC: deployment-events
 
 jobs:
