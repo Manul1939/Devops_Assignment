@@ -5,9 +5,13 @@ on:
     branches: [main, develop, "user/**"]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  packages: write
+
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAMESPACE: your-org
+  IMAGE_NAMESPACE: ${{ github.repository_owner }}
   KAFKA_TOPIC: deployment-events
 
 jobs:
