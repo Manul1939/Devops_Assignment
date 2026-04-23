@@ -1,9 +1,19 @@
 name: MultiTenant-CICD
 
+# Build + GHCR push always runs on GitHub-hosted Linux.
+# Helm / rollback / Kafka run on a self-hosted runner so your kubeconfig
+# (e.g. local Minikube on your laptop) is reachable. See workflow_dispatch
+# and repo variable ENABLE_K8S_DEPLOY.
+
 on:
   push:
     branches: [main, develop, "user/**"]
   workflow_dispatch:
+    inputs:
+      run_full:
+        description: "Run Helm deploy, rollback, and Kafka (requires self-hosted runner)"
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -14,7 +24,8 @@ env:
   KAFKA_TOPIC: deployment-events
 
 jobs:
-  build-and-deploy:
+  build:
+    name: Build and push
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -68,17 +79,60 @@ jobs:
             ${{ env.REGISTRY }}/${{ steps.image_ns.outputs.value }}/${{ matrix.image_name }}:${{ github.sha }}
             ${{ env.REGISTRY }}/${{ steps.image_ns.outputs.value }}/${{ matrix.image_name }}:${{ github.ref_name }}
 
+  deploy:
+    name: Deploy (self-hosted) + Kafka
+    needs: build
+    if: (github.event_name == 'push' && vars.ENABLE_K8S_DEPLOY == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run_full)
+    # Use any self-hosted runner (Windows with Minikube, WSL, or Linux). Install kubectl/helm or rely on the runner image.
+    runs-on: self-hosted
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - tenant: user1
+            app: node-app
+            image_name: tenant-node-app
+            namespace: user1
+            values_file: tenants/user1-values.yaml
+            domain: user1.example.com
+          - tenant: user2
+            app: flask-app
+            image_name: tenant-flask-app
+            namespace: user2
+            values_file: tenants/user2-values.yaml
+            domain: user2.example.com
+          - tenant: user3
+            app: node-app
+            image_name: tenant-node-app
+            namespace: user3
+            values_file: tenants/user3-values.yaml
+            domain: user3.example.com
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       - name: Set up kubectl
         uses: azure/setup-kubectl@v4
 
       - name: Set up Helm
         uses: azure/setup-helm@v4
 
+      - name: Compute lowercase image namespace
+        id: image_ns
+        shell: bash
+        run: |
+          echo "value=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
       - name: Configure kubeconfig
         shell: bash
         run: |
           mkdir -p ~/.kube
-          # Accept either base64 kubeconfig or raw kubeconfig text.
           CLEAN_INPUT="$(printf '%s' "${KUBE_CONFIG_DATA}" | tr -d '\r')"
           if printf '%s' "${CLEAN_INPUT}" | base64 --decode > ~/.kube/config 2>/dev/null; then
             echo "Loaded kubeconfig from base64 secret."
@@ -89,6 +143,12 @@ jobs:
           chmod 600 ~/.kube/config
         env:
           KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
+
+      - name: Kube API sanity check
+        shell: bash
+        run: |
+          echo "server=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')"
+          kubectl cluster-info
 
       - name: Deploy with rollback
         id: deploy
@@ -105,7 +165,7 @@ jobs:
 
           if [ $STATUS -ne 0 ]; then
             echo "Deployment failed for $RELEASE. Attempting rollback."
-            PREV=$(helm history "$RELEASE" -n "${{ matrix.namespace }}" -o json | jq '.[-2].revision // empty')
+            PREV=$(helm history "$RELEASE" -n "${{ matrix.namespace }}" -o json | python -c "import json,sys; a=json.load(sys.stdin); print(a[-2]['revision'] if len(a)>=2 else '')")
             if [ -n "$PREV" ]; then
               helm rollback "$RELEASE" "$PREV" -n "${{ matrix.namespace }}"
             fi
