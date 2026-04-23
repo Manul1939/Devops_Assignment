@@ -11,7 +11,6 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAMESPACE: ${{ github.repository_owner }}
   KAFKA_TOPIC: deployment-events
 
 jobs:
@@ -54,14 +53,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Compute lowercase image namespace
+        id: image_ns
+        shell: bash
+        run: |
+          echo "value=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
       - name: Build and push image
         uses: docker/build-push-action@v6
         with:
           context: ./apps/${{ matrix.app }}
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.image_name }}:${{ github.sha }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.image_name }}:${{ github.ref_name }}
+            ${{ env.REGISTRY }}/${{ steps.image_ns.outputs.value }}/${{ matrix.image_name }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ steps.image_ns.outputs.value }}/${{ matrix.image_name }}:${{ github.ref_name }}
 
       - name: Set up kubectl
         uses: azure/setup-kubectl@v4
@@ -85,7 +90,7 @@ jobs:
           helm upgrade --install "$RELEASE" ./helm/tenant-site \
             -n "${{ matrix.namespace }}" --create-namespace \
             -f "${{ matrix.values_file }}" \
-            --set image.repository="${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.image_name }}" \
+            --set image.repository="${{ env.REGISTRY }}/${{ steps.image_ns.outputs.value }}/${{ matrix.image_name }}" \
             --set image.tag="${{ github.sha }}"
           STATUS=$?
 
@@ -109,5 +114,5 @@ jobs:
           TENANT: ${{ matrix.tenant }}
           NAMESPACE: ${{ matrix.namespace }}
           DOMAIN: ${{ matrix.domain }}
-          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.image_name }}:${{ github.sha }}
+          IMAGE: ${{ env.REGISTRY }}/${{ steps.image_ns.outputs.value }}/${{ matrix.image_name }}:${{ github.sha }}
           STATUS: deployed
